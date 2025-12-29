@@ -1,0 +1,71 @@
+#define RXD1 40
+#define TXD1 41
+
+// ---------- AT SEND FUNCTION (DECLARE FIRST) ----------
+void sendAT(const char* cmd, int delayMs = 1000) {
+  Serial.println("\n>> " + String(cmd));
+  Serial1.println(cmd);
+  delay(delayMs);
+
+  while (Serial1.available()) {
+    Serial.write(Serial1.read());
+  }
+}
+
+// ------------------- SETUP -------------------
+void setup() {
+  Serial.begin(115200);
+  Serial1.begin(115200, SERIAL_8N1, RXD1, TXD1);
+
+  delay(3000);
+  Serial.println("EC200U SIM TEST START");
+
+  sendAT("AT");
+  sendAT("ATE0");
+  sendAT("AT+CPIN?");
+  sendAT("AT+QSIMSTAT?");
+  sendAT("AT+QCCID");
+  sendAT("AT+CSQ");
+  sendAT("AT+CEREG?");
+  sendAT("AT+COPS?");
+}
+
+// ------------------- LOOP -------------------
+void loop() {
+  // nothing
+}
+
+
+//OUTPUT//
+
+00:36:28.603 -> EC200U SIM TEST START
+00:36:28.603 -> 
+00:36:28.603 -> >> AT
+00:36:29.564 -> 
+00:36:29.564 -> OK
+00:36:29.564 -> 
+00:36:29.564 -> >> ATE0
+00:36:30.564 -> 
+00:36:30.564 -> OK
+00:36:30.564 -> 
+00:36:30.564 -> RDY
+00:36:30.564 -> 
+00:36:30.564 -> >> AT+CPIN?
+00:36:31.564 -> 
+00:36:31.564 -> +CPIN: READY
+00:36:31.564 -> 
+00:36:31.564 -> OK
+00:36:31.564 -> 
+00:36:31.564 -> >> AT+QSIMSTAT?
+00:36:32.565 -> 
+00:36:32.565 -> >> AT+QCCID
+00:36:33.602 -> 
+00:36:33.602 -> >> AT+CSQ
+00:36:34.565 -> 
+00:36:34.565 -> +CME ERROR: 50
+00:36:34.565 -> 
+00:36:34.565 -> >> AT+CEREG?
+00:36:35.575 -> 
+00:36:35.575 -> +CEREG: 0,0
+00:36:35.575 -> 
+00:36:35.575 -> OK
