@@ -96,6 +96,9 @@ void loop() {
 00:47:28.039 -> OK
 00:48:23.664 -> 
 00:48:23.664 -> >> AT+CSQ
+00:56:15.964 -> +COPS: 0,0,"IND airtel",7
+00:56:15.964 -> 
+00:56:15.964 -> OK
 
 
 Final Summary (Plain & Clear)
