@@ -1,0 +1,74 @@
+#define TINY_GSM_MODEM_BG96
+
+#include <Arduino.h>
+#include <TinyGsmClient.h>
+
+#define SerialMon Serial
+#define SerialAT  Serial2
+
+#define PWRKEY_PIN 42
+
+TinyGsm modem(SerialAT);
+
+void powerOnEC200U() {
+  SerialMon.println("Powering ON EC200U...");
+
+  pinMode(PWRKEY_PIN, OUTPUT);
+  digitalWrite(PWRKEY_PIN, LOW);
+  delay(100);
+
+  digitalWrite(PWRKEY_PIN, HIGH);
+  delay(1200);
+  digitalWrite(PWRKEY_PIN, LOW);
+
+  SerialMon.println("PWRKEY pulse done");
+  delay(5000);
+}
+
+void setup() {
+  Serial.begin(115200);
+  delay(2000);   // <<< IMPORTANT
+
+  SerialMon.println();
+  SerialMon.println("========================================");
+  SerialMon.println("ESP32-S3 + EC200U TinyGSM BASIC TEST");
+  SerialMon.println("========================================");
+
+  powerOnEC200U();
+
+  SerialAT.begin(115200);
+  delay(1000);
+
+  SerialMon.println("Restarting modem...");
+  if (!modem.restart()) {
+    SerialMon.println("❌ Modem restart FAILED");
+  } else {
+    SerialMon.println("✅ Modem restarted successfully");
+  }
+
+  SerialMon.print("Modem Info: ");
+  SerialMon.println(modem.getModemInfo());
+
+  SerialMon.println("STEP 1 COMPLETE");
+}
+
+void loop() {
+  SerialMon.println("ESP32 LOOP RUNNING OK");
+  delay(2000);
+}
+
+
+
+// OUTPUT//
+
+00:08:18.488 -> ========================================
+00:08:18.488 -> ESP32-S3 + EC200U TinyGSM BASIC TEST
+00:08:18.488 -> ========================================
+00:08:18.488 -> Powering ON EC200U...
+00:08:18.488 -> PWRKEY pulse done
+00:08:40.675 -> 
+00:08:40.675 -> ========================================
+00:08:40.675 -> ESP32-S3 + EC200U TinyGSM BASIC TEST
+00:08:40.675 -> ========================================
+00:08:40.675 -> Powering ON EC200U...
+00:08:41.973 -> PWRKEY pulse done
