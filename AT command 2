@@ -1,0 +1,122 @@
+#define RXD1 40
+#define TXD1 41
+
+// ---------- SEND AT COMMAND ----------
+void sendAT(const char* cmd, int waitMs = 1500) {
+  Serial.println();
+  Serial.print(">> ");
+  Serial.println(cmd);
+
+  Serial1.println(cmd);
+  delay(waitMs);
+
+  while (Serial1.available()) {
+    Serial.write(Serial1.read());
+  }
+}
+
+// ------------------- SETUP -------------------
+void setup() {
+  Serial.begin(115200);
+  Serial1.begin(115200, SERIAL_8N1, RXD1, TXD1);
+
+  delay(3000);
+  Serial.println("\n==============================");
+  Serial.println(" EC200U AT COMMAND TEST START ");
+  Serial.println("==============================");
+
+  // Basic
+  sendAT("AT");
+  sendAT("ATE0");
+  sendAT("AT+CMEE=2");      // verbose errors
+
+  // SIM checks
+  sendAT("AT+CPIN?");
+  sendAT("AT+QSIMSTAT?");
+  sendAT("AT+QCCID");
+  sendAT("AT+CIMI");
+
+  // Network checks
+  sendAT("AT+CSQ");
+  sendAT("AT+CREG?");
+  sendAT("AT+CEREG?");
+  sendAT("AT+COPS?");
+
+  Serial.println("\n--- AUTO TEST DONE ---");
+  Serial.println("Type AT commands below ⬇️");
+}
+
+// ------------------- LOOP -------------------
+void loop() {
+
+  // 🔁 MANUAL AT COMMAND MODE
+  // Type any AT command in Serial Monitor and press Enter
+  if (Serial.available()) {
+    String cmd = Serial.readStringUntil('\n');
+    cmd.trim();
+
+    if (cmd.length() > 0) {
+      Serial.print("\n>> ");
+      Serial.println(cmd);
+      Serial1.println(cmd);
+    }
+  }
+
+  // Print EC200U responses in real-time
+  while (Serial1.available()) {
+    Serial.write(Serial1.read());
+  }
+}
+
+
+//OUTPUT//
+
+00:43:25.055 -> 8991000903580124490F
+00:43:25.055 -> 
+00:43:25.055 -> OK
+00:43:25.055 -> 
+00:43:25.055 -> >> AT+CIMI
+00:43:25.055 -> 
+00:43:25.055 -> 405540160297362
+00:43:25.055 -> 
+00:43:25.055 -> OK
+00:43:25.055 -> 
+00:43:25.055 -> >> AT+CSQ
+00:43:25.055 -> 
+00:43:25.055 -> +CSQ: 12,99
+00:43:25.055 -> 
+00:47:19.058 -> +CEREG: 0,5
+00:47:19.058 -> 
+00:47:19.058 -> OK
+00:47:27.998 -> 
+00:47:27.998 -> >> AT+QNWINFO
+00:47:27.998 -> 
+00:47:27.998 -> +QNWINFO: "TDD LTE","40490","LTE BAND 40",39294
+00:47:28.039 -> 
+00:47:28.039 -> OK
+00:48:23.664 -> 
+00:48:23.664 -> >> AT+CSQ
+
+
+Final Summary (Plain & Clear)
+
+Your SIM card is properly inserted and detected
+→ Hardware, SIM slot, and SIM are working fine
+
+The SIM is Airtel (India)
+→ Confirmed by IMSI and network codes
+→ Airtel uses multiple internal codes, so the numbers you saw are normal
+
+Signal strength is fair but usable
+→ CSQ: 12
+→ Enough for LTE data, MQTT, and AWS IoT
+
+Your modem is successfully registered on LTE
+→ CEREG: 0,5 means registered (roaming)
+→ This is common in India due to shared towers
+→ Not an error
+
+Network details show Airtel LTE Band 40 (2300 MHz)
+→ Stable LTE connection
+→ Data services should work
+
