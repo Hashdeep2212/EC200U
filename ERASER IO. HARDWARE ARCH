@@ -1,0 +1,58 @@
+title Telemetry Unit – High-Level System Architecture
+
+// Main Groups and Nodes
+
+Processing & Control Unit [icon: cpu, color: blue] {
+  ESP32 Dev Module [icon: esp32, label: "ESP32"]
+}
+
+Communication & Positioning Unit [icon: satellite, color: green] {
+  Quectel EC200U Module [icon: radio, label: "GSM/GPS Module"]
+  GSM Antenna [icon: antenna, label: "GSM Antenna"]
+  GPS Antenna [icon: map-pin, label: "GPS Antenna"]
+}
+
+Sensor Interface Unit [icon: activity, color: orange] {
+  MPU6050 [icon: activity, label: "MPU6050 (Accel/Gyro)"]
+  Flame Sensor [icon: fire, label: "Flame Sensor"]
+  DHT22 [icon: thermometer, label: "DHT22 (Temp/Humidity)"]
+}
+
+User Interaction Unit [icon: user, color: purple] {
+  SOS Button [icon: alert-triangle, label: "SOS Button"]
+}
+
+Power Supply & Backup Unit [icon: battery-charging, color: yellow] {
+  UPS Battery [icon: battery, label: "UPS Battery"]
+  Power Regulation [icon: zap, label: "Power Regulation"]
+}
+
+// Standalone / Future Nodes
+Telemetry Output [icon: message-square, label: "SMS / Telemetry Output"]
+Cloud Integration [icon: cloud, label: "Cloud/Mobile Dashboard"]
+
+// Connections
+
+// Sensor data to ESP32
+
+// SOS Button interrupt to ESP32
+SOS Button > ESP32 Dev Module: emergency trigger
+
+// Power supply to ESP32 and GSM/GPS
+UPS Battery > Power Regulation
+Power Regulation > ESP32 Dev Module
+Power Regulation > Quectel EC200U Module
+
+// ESP32 <-> GSM/GPS Module (UART)
+ESP32 Dev Module <> Quectel EC200U Module: UART comms
+
+// Antennas to GSM/GPS Module
+GSM Antenna > Quectel EC200U Module
+GPS Antenna > Quectel EC200U Module
+
+// GSM/GPS Module to external output
+Quectel EC200U Module > Telemetry Output: SMS/Data
+
+// Optional: Telemetry to Cloud/Mobile Dashboard (future)
+Quectel EC200U Module > Cloud Integration: telemetry (future)
+Sensor Interface Unit > ESP32 Dev Module
