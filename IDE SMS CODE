@@ -1,0 +1,179 @@
+#include <HardwareSerial.h>
+#include <Wire.h>
+#include <Adafruit_MPU6050.h>
+#include <Adafruit_Sensor.h>
+#include <math.h>
+
+/* ================= PIN DEFINITIONS ================= */
+#define GSM_STAT_PIN   34
+#define GSM_PWRKEY_PIN 33
+#define GSM_RX         14
+#define GSM_TX         13
+
+#define SDA_PIN        15
+#define SCL_PIN        4
+
+#define FLAME_PIN      35
+#define MQ5_PIN        32
+#define SWITCH_PIN     36      // SOS switch (INPUT ONLY pin)
+#define BUZZER_PIN     12
+
+/* ================= SMS CONFIG ================= */
+#define SMS_RECIPIENT_NUMBER "+918543061008"
+
+/* ================= HARDCODED GPS (FALLBACK) ================= */
+#define USE_GPS_FALLBACK true
+const float FALLBACK_LAT = 18.5852368;
+const float FALLBACK_LON = 73.7376059;
+
+/* ================= GLOBAL OBJECTS ================= */
+HardwareSerial SerialAT(2);
+Adafruit_MPU6050 mpu;
+
+/* ================= GLOBAL STATE ================= */
+bool smsSentThisSession = false;
+
+/* ================= RANDOM HELPERS ================= */
+float randomSpeed() {
+  return random(20, 150) / 10.0;   // 2.0 – 15.0 km/h
+}
+
+float randomDirection() {
+  return random(0, 360);
+}
+
+/* ================= MODEM POWER ================= */
+void modemPowerOn() {
+  pinMode(GSM_PWRKEY_PIN, OUTPUT);
+  pinMode(GSM_STAT_PIN, INPUT);
+
+  if (digitalRead(GSM_STAT_PIN) == HIGH) return;
+
+  Serial.println("🔌 Powering modem...");
+  digitalWrite(GSM_PWRKEY_PIN, HIGH);
+  delay(2200);
+  digitalWrite(GSM_PWRKEY_PIN, LOW);
+  delay(6000);
+}
+
+/* ================= WAIT FOR RESPONSE ================= */
+bool waitForResponse(String expected, unsigned long timeout) {
+  unsigned long start = millis();
+  String response = "";
+
+  while (millis() - start < timeout) {
+    if (SerialAT.available()) {
+      response += (char)SerialAT.read();
+      if (response.indexOf(expected) != -1) return true;
+    }
+  }
+  return false;
+}
+
+/* ================= SEND SMS ================= */
+void sendSMS(String message) {
+  Serial.println("📨 Sending SMS...");
+
+  SerialAT.println("AT+CMGF=1");          // Text mode
+  waitForResponse("OK", 2000);
+
+  SerialAT.print("AT+CMGS=\"");
+  SerialAT.print(SMS_RECIPIENT_NUMBER);
+  SerialAT.println("\"");
+  delay(1000);
+
+  SerialAT.print(message);
+  SerialAT.write(26);   // CTRL+Z
+  waitForResponse("OK", 10000);
+
+  Serial.println("✅ SMS Sent");
+}
+
+/* ================= SETUP ================= */
+void setup() {
+  Serial.begin(115200);
+  randomSeed(micros());
+
+  Wire.begin(SDA_PIN, SCL_PIN);
+
+  pinMode(FLAME_PIN, INPUT);
+  pinMode(MQ5_PIN, INPUT);
+  pinMode(SWITCH_PIN, INPUT_PULLUP);
+  pinMode(BUZZER_PIN, OUTPUT);
+
+  if (!mpu.begin()) {
+    Serial.println("❌ MPU6050 not found");
+    while (1);
+  }
+
+  modemPowerOn();
+  SerialAT.begin(115200, SERIAL_8N1, GSM_RX, GSM_TX);
+  delay(2000);
+
+  SerialAT.println("AT");
+  waitForResponse("OK", 2000);
+
+  Serial.println("✅ SYSTEM READY (SMS MODE ONLY)");
+}
+
+/* ================= LOOP ================= */
+void loop() {
+  bool flameDetected = digitalRead(FLAME_PIN) == LOW;
+  bool sosPressed = digitalRead(SWITCH_PIN) == LOW;
+  int mq5Raw = analogRead(MQ5_PIN);
+
+  sensors_event_t accel, gyro, temp;
+  mpu.getEvent(&accel, &gyro, &temp);
+
+  float pitch = atan2(
+    accel.acceleration.x,
+    sqrt(pow(accel.acceleration.y, 2) + pow(accel.acceleration.z, 2))
+  ) * 180 / M_PI;
+
+  float roll = atan2(
+    accel.acceleration.y,
+    sqrt(pow(accel.acceleration.x, 2) + pow(accel.acceleration.z, 2))
+  ) * 180 / M_PI;
+
+  float lat = FALLBACK_LAT;
+  float lon = FALLBACK_LON;
+  float speed = randomSpeed();
+  float direction = randomDirection();
+
+  digitalWrite(BUZZER_PIN, (flameDetected || sosPressed));
+
+  Serial.println("══════════ STATUS ══════════");
+  Serial.printf("📡 GPS     : %.6f , %.6f\n", lat, lon);
+  Serial.printf("🧭 Speed   : %.2f km/h\n", speed);
+  Serial.printf("🧭 Course  : %.2f deg\n", direction);
+  Serial.printf("🧪 MQ5     : %d\n", mq5Raw);
+  Serial.printf("🔥 Flame   : %s\n", flameDetected ? "DETECTED" : "SAFE");
+  Serial.printf("📐 Pitch   : %.2f deg\n", pitch);
+  Serial.printf("📐 Roll    : %.2f deg\n", roll);
+  Serial.printf("🚨 SOS     : %s\n", sosPressed ? "ACTIVE" : "OFF");
+  Serial.println("════════════════════════════\n");
+
+  /* -------- SEND SMS ONLY ON SOS -------- */
+  if (sosPressed && !smsSentThisSession) {
+    String sms =
+      "🚨 SOS ALERT 🚨\n"
+      "Location:\n"
+      "Lat: " + String(lat, 6) + "\n"
+      "Lon: " + String(lon, 6) + "\n"
+      "Speed: " + String(speed, 1) + " km/h\n"
+      "MQ5: " + String(mq5Raw) + "\n"
+      "Flame: " + String(flameDetected ? "YES" : "NO") + "\n"
+      "Pitch: " + String(pitch, 1) + " deg\n"
+      "Roll: " + String(roll, 1) + " deg";
+
+    sendSMS(sms);
+    smsSentThisSession = true;
+  }
+
+  /* -------- RESET SMS FLAG WHEN SOS RELEASED -------- */
+  if (!sosPressed) {
+    smsSentThisSession = false;
+  }
+
+  delay(500);
+}
