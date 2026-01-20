@@ -1,0 +1,158 @@
+#include <HardwareSerial.h>
+#include <Wire.h>
+#include <Adafruit_MPU6050.h>
+#include <Adafruit_Sensor.h>
+#include <math.h>
+
+/* ===================== PIN CONFIG ===================== */
+#define GSM_PWRKEY 33
+#define GSM_STAT   34
+#define GSM_RX     14
+#define GSM_TX     13
+
+#define SDA_PIN    15
+#define SCL_PIN    4
+
+#define FLAME_PIN  35
+#define MQ5_PIN    32
+#define SOS_PIN    36   // input-only pin (SOS disabled)
+
+/* ===================== MQTT CONFIG ===================== */
+#define MQTT_BROKER "broker.hivemq.com"
+#define MQTT_PORT   1883
+#define MQTT_TOPIC  "vehicle/telemetry"
+
+/* ===================== STATIC GPS ===================== */
+const float LAT = 18.5852368;
+const float LON = 73.7376059;
+
+/* ===================== OBJECTS ===================== */
+HardwareSerial SerialAT(2);
+Adafruit_MPU6050 mpu;
+
+/* ===================== HELPERS ===================== */
+bool waitFor(String keyword, unsigned long timeout) {
+  unsigned long start = millis();
+  String response;
+
+  while (millis() - start < timeout) {
+    while (SerialAT.available()) {
+      char c = SerialAT.read();
+      response += c;
+      if (response.indexOf(keyword) != -1) {
+        Serial.println(response);
+        return true;
+      }
+    }
+  }
+  Serial.println(response);
+  return false;
+}
+
+void modemOn() {
+  pinMode(GSM_PWRKEY, OUTPUT);
+  pinMode(GSM_STAT, INPUT);
+
+  if (digitalRead(GSM_STAT)) return;
+
+  digitalWrite(GSM_PWRKEY, HIGH);
+  delay(2000);
+  digitalWrite(GSM_PWRKEY, LOW);
+  delay(7000);
+}
+
+/* ===================== MQTT ===================== */
+void mqttConnect() {
+  SerialAT.println("AT+QMTCFG=\"recv/mode\",0,0,1");
+  waitFor("OK", 2000);
+
+  String openCmd = "AT+QMTOPEN=0,\"";
+  openCmd += MQTT_BROKER;
+  openCmd += "\"," + String(MQTT_PORT);
+
+  SerialAT.println(openCmd);
+  waitFor("+QMTOPEN: 0,0", 10000);
+
+  SerialAT.println("AT+QMTCONN=0,\"EC200U\"");
+  waitFor("+QMTCONN: 0,0,0", 10000);
+}
+
+void mqttPublish(String payload) {
+  SerialAT.println("AT+QMTPUB=0,0,0,0,\"" MQTT_TOPIC "\"");
+  if (waitFor(">", 3000)) {
+    SerialAT.print(payload);
+    SerialAT.write(26);   // CTRL+Z
+    waitFor("OK", 5000);
+  }
+}
+
+/* ===================== SETUP ===================== */
+void setup() {
+  Serial.begin(115200);
+  delay(1000);
+
+  Wire.begin(SDA_PIN, SCL_PIN);
+
+  pinMode(FLAME_PIN, INPUT);
+  pinMode(MQ5_PIN, INPUT);
+  pinMode(SOS_PIN, INPUT);   // ✅ NO PULLUP (GPIO 36)
+
+  if (!mpu.begin()) {
+    Serial.println("MPU6050 not found");
+    while (1);
+  }
+
+  modemOn();
+
+  SerialAT.begin(115200, SERIAL_8N1, GSM_RX, GSM_TX);
+  delay(2000);
+
+  SerialAT.println("AT");
+  waitFor("OK", 2000);
+
+  mqttConnect();
+}
+
+/* ===================== LOOP ===================== */
+void loop() {
+  sensors_event_t accel, gyro, temp;
+  mpu.getEvent(&accel, &gyro, &temp);
+
+  float pitch = atan2(
+    accel.acceleration.x,
+    sqrt(accel.acceleration.y * accel.acceleration.y +
+         accel.acceleration.z * accel.acceleration.z)
+  ) * 180.0 / M_PI;
+
+  float roll = atan2(
+    accel.acceleration.y,
+    sqrt(accel.acceleration.x * accel.acceleration.x +
+         accel.acceleration.z * accel.acceleration.z)
+  ) * 180.0 / M_PI;
+
+  int mq5_raw = analogRead(MQ5_PIN);
+  bool flame = digitalRead(FLAME_PIN) == LOW;
+
+  // 🔒 SOS FORCE-DISABLED
+  bool sos = false;
+
+  float speed = random(20, 150) / 10.0;
+  float direction = random(0, 360);
+
+  String payload = "{";
+  payload += "\"lat\":" + String(LAT, 6) + ",";
+  payload += "\"lon\":" + String(LON, 6) + ",";
+  payload += "\"speed\":" + String(speed, 1) + ",";
+  payload += "\"direction\":" + String(direction, 0) + ",";
+  payload += "\"flame\":" + String(flame ? "true" : "false") + ",";
+  payload += "\"mq5_raw\":" + String(mq5_raw) + ",";
+  payload += "\"tilt_level\":" + String(roll, 2) + ",";
+  payload += "\"pitch_angle\":" + String(pitch, 2) + ",";
+  payload += "\"sos\":false";
+  payload += "}";
+
+  mqttPublish(payload);
+  Serial.println(payload);
+
+  delay(1000);
+}
